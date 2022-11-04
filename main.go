@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"github.com/maxence-charriere/go-app/v9/pkg/app"
 	"log"
+	"math/rand"
 	"net/http"
 	"nhooyr.io/websocket"
+	"strconv"
 	"time"
 )
 
@@ -18,17 +20,18 @@ type ChatPage struct {
 	app.Compo
 	Name     string
 	MsgArray []string
+	ClientID int
 }
 
-// ReadWSTesting is supposed to work for reading from the websocket.
+// ClientReading is supposed to work for reading from the websocket.
 //
 // It works, it appends the values actually.
 //
 // TODO: filter received messages, e.g: if temp.Message includes WELCOME:xxxxx, read the part after welcome.
-func (g *ChatPage) ReadWSTesting(ctx context.Context, conn *websocket.Conn, ctxApp app.Context) error {
+func (g *ChatPage) ClientReading(ctx context.Context, conn *websocket.Conn, ctxApp app.Context) error {
 	// declare a {}interface to hold the message as string
 	var temp TestComm
-	// read the message from the websocket
+	// Read until 1 hour context deadline.
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
@@ -44,15 +47,11 @@ func (g *ChatPage) ReadWSTesting(ctx context.Context, conn *websocket.Conn, ctxA
 			return err
 		}
 
-		// write and return bool to indicate new message
 		if temp.Message != "" {
-			fmt.Println("Received message from websocket:", temp.Message)
-			err = nil
 			ctxApp.Dispatch(func(ctxApp app.Context) {
 				g.MsgArray = append(g.MsgArray, temp.Message)
 			})
-		} else {
-			return err
+			_ = "Client> " + strconv.Itoa(g.ClientID) + " received> " + temp.Message
 		}
 	}
 	return nil
@@ -78,12 +77,17 @@ func (g *ChatPage) MountWS(ctx app.Context) {
 		log.Fatal("dial:", err)
 	}
 	// close connection after done
-	defer conn.Close(websocket.StatusInternalError, "the sky is falling")
+	defer func(conn *websocket.Conn, code websocket.StatusCode, reason string) {
+		err := conn.Close(code, reason)
+		if err != nil {
+			log.Fatal(err)
+		}
+	}(conn, websocket.StatusInternalError, "Leaving!")
 	fmt.Println("Connected to websocket") //localhost:3169/ws
 
 	// read the message from the websocket
 	for { // Read incoming signals every 2 seconds, append them to an array, and set newMessage state to true.
-		err = g.ReadWSTesting(ctxWS, conn, ctx)
+		err = g.ClientReading(ctxWS, conn, ctx)
 		if err != nil {
 			// woops, connection is fucked. break the loop.
 			fmt.Println("Error reading from websocket:", err)
@@ -92,6 +96,9 @@ func (g *ChatPage) MountWS(ctx app.Context) {
 	}
 }
 func (g *ChatPage) onClick(ctx app.Context, e app.Event) {
+	// generate a client ID to log the messages and the events.
+	var clientID = rand.Intn(1000000)
+	g.ClientID = clientID
 	// connect to ws://localhost:8000/ws
 	go g.MountWS(ctx)
 }
@@ -104,7 +111,7 @@ func (g *ChatPage) Render() app.UI {
 		app.Button().OnClick(g.onClick).Body(
 			app.Text("Click me"),
 		),
-		// If UpdateAvailable from ReadWSTesting, then update the UI
+		// If UpdateAvailable from ClientReading, then update the UI
 		app.Range(g.MsgArray).Slice(func(i int) app.UI {
 			return app.Div().Body(
 				app.Li().Body(
