@@ -16,71 +16,80 @@ type TestComm struct {
 }
 type ChatPage struct {
 	app.Compo
-	Name            string
-	MsgArray        []string
-	UpdateAvailable bool
+	Name     string
+	MsgArray []string
 }
 
-func (g *ChatPage) onInputChange(ctx app.Context, e app.EventHandler) {
-	name := ctx.JSSrc().Get("value").String()
-	ctx.NewActionWithValue("ChatPage", name) // Creating "ChatPage" action.
-}
-
-func (g *ChatPage) ReadWSTesting(ctx context.Context, conn *websocket.Conn, ctxApp app.Context) string {
+// ReadWSTesting is supposed to work for reading from the websocket.
+//
+// It works, it appends the values actually.
+//
+// TODO: filter received messages, e.g: if temp.Message includes WELCOME:xxxxx, read the part after welcome.
+func (g *ChatPage) ReadWSTesting(ctx context.Context, conn *websocket.Conn, ctxApp app.Context) (string, error) {
 	// declare a {}interface to hold the message as string
 	var temp TestComm
 	// read the message from the websocket
 	_, r, err := conn.Reader(ctx)
 	if err != nil {
-		log.Fatal("reader opening:", err)
+		return "", err
 	}
 
 	// decode
 	err = json.NewDecoder(r).Decode(&temp)
 	if err != nil {
-		log.Fatal("decode:", err)
+		return "", err
 	}
 
 	// write and return bool to indicate new messages
 	if temp.Message != "" {
 		fmt.Println("Received message from websocket:", temp.Message)
-		return temp.Message
+		err = nil
+		return temp.Message, err
 	} else {
-		return ""
+		return "", err
 	}
 }
+
+// OnAppUpdate is called when application has updates.
+//
+// By updates, not component updates, literally app code updates.
 func (g *ChatPage) OnAppUpdate(ctx app.Context) {
-	g.UpdateAvailable = ctx.AppUpdateAvailable()
 	ctx.Reload()
 }
+
+// MountWS is a process that will be running concurrently when clicked to a button.
+//
+// Will handle connections to the websocket.
 func (g *ChatPage) MountWS(ctx app.Context) {
 	var tempString string
-	// connect to the ws://localhost:3169/ws endpoint
 	ctxWS, cancel := context.WithTimeout(context.Background(), time.Minute*1)
 	// cancel the WS connection after 1 minute, or cancel it at the end of the function
 	defer cancel()
+	// connect to the ws://localhost:3169/ws endpoint
 	conn, _, err := websocket.Dial(ctxWS, "ws://localhost:3169/ws", nil)
 	if err != nil {
 		log.Fatal("dial:", err)
 	}
+	// close connection after done
 	defer conn.Close(websocket.StatusInternalError, "the sky is falling")
 	fmt.Println("Connected to websocket") //localhost:3169/ws
 
 	// read the message from the websocket
-	for {
+	for { // Read incoming signals every 2 seconds, append them to an array, and set newMessage state to true.
+		tempString, err = g.ReadWSTesting(ctxWS, conn, ctx)
 		if err != nil {
-			log.Fatal("readeropening:", err)
+			// woops, connection is fucked. break the loop.
+			break
 		}
-		tempString = g.ReadWSTesting(ctxWS, conn, ctx)
 		g.MsgArray = append(g.MsgArray, tempString)
-		ctx.SetState("message", g.MsgArray)
+		ctx.SetState("/newMessage", true)
+		fmt.Println("newMessage state set to true")
 		time.Sleep(time.Second * 2)
 	}
 }
 func (g *ChatPage) OnMount(ctx app.Context) {
-	ctx.ObserveState("message").While(func() bool {
-		return g.MsgArray != nil
-	}).OnChange(func() {
+	ctx.ObserveState("/newMessage").OnChange(func() {
+		fmt.Println("newMessage state changed.")
 		g.Update()
 	})
 }
