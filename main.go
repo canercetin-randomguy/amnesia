@@ -75,25 +75,28 @@ func (g *ChatPage) MountWS(ctx app.Context) {
 	fmt.Println("Connected to websocket") //localhost:3169/ws
 
 	// read the message from the websocket
+	var i = 1
 	for { // Read incoming signals every 2 seconds, append them to an array, and set newMessage state to true.
 		tempString, err = g.ReadWSTesting(ctxWS, conn, ctx)
 		if err != nil {
 			// woops, connection is fucked. break the loop.
 			break
 		}
+		fmt.Println("Received message from websocket:", tempString, "this is ", i, "th message")
 		if tempString != "" {
 			g.MsgArray = append(g.MsgArray, tempString)
 			ctx.SetState("/newMessage", true)
-		} else {
-			ctx.SetState("/newMessage", false)
+			fmt.Println("newMessage state set to true")
 		}
 		time.Sleep(time.Second * 2)
+		i++
 	}
 }
 func (g *ChatPage) OnMount(ctx app.Context) {
 	ctx.ObserveState("/newMessage").OnChange(func() {
 		var tempBool bool
 		ctx.GetState("/newMessage", &tempBool)
+		fmt.Println("newMessage state changed to", tempBool)
 		if tempBool {
 			fmt.Println("yeah probably")
 			ctx.Reload()
