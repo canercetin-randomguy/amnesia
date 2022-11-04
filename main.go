@@ -25,44 +25,51 @@ type ChatPage struct {
 // It works, it appends the values actually.
 //
 // TODO: filter received messages, e.g: if temp.Message includes WELCOME:xxxxx, read the part after welcome.
-func (g *ChatPage) ReadWSTesting(ctx context.Context, conn *websocket.Conn, ctxApp app.Context) (string, error) {
+func (g *ChatPage) ReadWSTesting(ctx context.Context, conn *websocket.Conn, ctxApp app.Context) error {
 	// declare a {}interface to hold the message as string
 	var temp TestComm
 	// read the message from the websocket
-	_, r, err := conn.Reader(ctx)
-	if err != nil {
-		return "", err
-	}
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+		_, r, err := conn.Reader(ctx)
+		if err != nil {
+			return err
+		}
 
-	// decode
-	err = json.NewDecoder(r).Decode(&temp)
-	if err != nil {
-		return "", err
-	}
+		// decode
+		err = json.NewDecoder(r).Decode(&temp)
+		if err != nil {
+			return err
+		}
 
-	// write and return bool to indicate new messages
-	if temp.Message != "" {
-		fmt.Println("Received message from websocket:", temp.Message)
-		err = nil
-		return temp.Message, err
-	} else {
-		return "", err
+		// write and return bool to indicate new messages
+		if temp.Message != "" {
+			fmt.Println("Received message from websocket:", temp.Message)
+			err = nil
+			ctxApp.Dispatch(func(ctxApp app.Context) {
+				g.MsgArray = append(g.MsgArray, temp.Message)
+			})
+		} else {
+			return err
+		}
 	}
+	return nil
 }
 
 // OnAppUpdate is called when application has updates.
 //
 // By updates, not component updates, literally app code updates.
 func (g *ChatPage) OnAppUpdate(ctx app.Context) {
-	ctx.Reload()
+	fmt.Println("App updated")
 }
 
 // MountWS is a process that will be running concurrently when clicked to a button.
 //
 // Will handle connections to the websocket.
 func (g *ChatPage) MountWS(ctx app.Context) {
-	var tempString string
-	ctxWS, cancel := context.WithTimeout(context.Background(), time.Minute*1)
+	ctxWS, cancel := context.WithTimeout(context.Background(), time.Minute*60)
 	// cancel the WS connection after 1 minute, or cancel it at the end of the function
 	defer cancel()
 	// connect to the ws://localhost:3169/ws endpoint
@@ -75,33 +82,14 @@ func (g *ChatPage) MountWS(ctx app.Context) {
 	fmt.Println("Connected to websocket") //localhost:3169/ws
 
 	// read the message from the websocket
-	var i = 1
 	for { // Read incoming signals every 2 seconds, append them to an array, and set newMessage state to true.
-		tempString, err = g.ReadWSTesting(ctxWS, conn, ctx)
+		err = g.ReadWSTesting(ctxWS, conn, ctx)
 		if err != nil {
 			// woops, connection is fucked. break the loop.
+			fmt.Println("Error reading from websocket:", err)
 			break
 		}
-		fmt.Println("Received message from websocket:", tempString, "this is ", i, "th message")
-		if tempString != "" {
-			g.MsgArray = append(g.MsgArray, tempString)
-			ctx.SetState("/newMessage", true)
-			fmt.Println("newMessage state set to true")
-		}
-		time.Sleep(time.Second * 2)
-		i++
 	}
-}
-func (g *ChatPage) OnMount(ctx app.Context) {
-	ctx.ObserveState("/newMessage").OnChange(func() {
-		var tempBool bool
-		ctx.GetState("/newMessage", &tempBool)
-		fmt.Println("newMessage state changed to", tempBool)
-		if tempBool {
-			fmt.Println("yeah probably")
-			ctx.Reload()
-		}
-	})
 }
 func (g *ChatPage) onClick(ctx app.Context, e app.Event) {
 	// connect to ws://localhost:8000/ws
