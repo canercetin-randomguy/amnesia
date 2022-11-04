@@ -8,28 +8,25 @@ import (
 	"log"
 	"net/http"
 	"nhooyr.io/websocket"
-	"sync"
 	"time"
 )
-
-var cnt = 0
 
 type TestComm struct {
 	Message string `json:"message,omitempty"`
 }
-type greet struct {
+type ChatPage struct {
 	app.Compo
 	Name            string
 	MsgArray        []string
 	UpdateAvailable bool
 }
 
-func (g *greet) onInputChange(ctx app.Context, e app.EventHandler) {
+func (g *ChatPage) onInputChange(ctx app.Context, e app.EventHandler) {
 	name := ctx.JSSrc().Get("value").String()
-	ctx.NewActionWithValue("greet", name) // Creating "greet" action.
+	ctx.NewActionWithValue("ChatPage", name) // Creating "ChatPage" action.
 }
 
-func (g *greet) ReadWSTesting(ctx context.Context, conn *websocket.Conn, ctxApp app.Context) string {
+func (g *ChatPage) ReadWSTesting(ctx context.Context, conn *websocket.Conn, ctxApp app.Context) string {
 	// declare a {}interface to hold the message as string
 	var temp TestComm
 	// read the message from the websocket
@@ -47,19 +44,16 @@ func (g *greet) ReadWSTesting(ctx context.Context, conn *websocket.Conn, ctxApp 
 	// write and return bool to indicate new messages
 	if temp.Message != "" {
 		fmt.Println("Received message from websocket:", temp.Message)
-		g.OnAppUpdate(ctxApp)
 		return temp.Message
 	} else {
 		return ""
 	}
 }
-func (g *greet) OnAppUpdate(ctx app.Context) {
-	fmt.Println("Setting condition to true")
+func (g *ChatPage) OnAppUpdate(ctx app.Context) {
 	g.UpdateAvailable = ctx.AppUpdateAvailable()
-	cnt++
 	ctx.Reload()
 }
-func (g *greet) MountWS(ctx app.Context, e app.Event, wg *sync.WaitGroup) {
+func (g *ChatPage) MountWS(ctx app.Context) {
 	var tempString string
 	// connect to the ws://localhost:3169/ws endpoint
 	ctxWS, cancel := context.WithTimeout(context.Background(), time.Minute*1)
@@ -79,37 +73,44 @@ func (g *greet) MountWS(ctx app.Context, e app.Event, wg *sync.WaitGroup) {
 		}
 		tempString = g.ReadWSTesting(ctxWS, conn, ctx)
 		g.MsgArray = append(g.MsgArray, tempString)
+		ctx.SetState("message", g.MsgArray)
 		time.Sleep(time.Second * 2)
 	}
 }
-func (g *greet) onClick(ctx app.Context, e app.Event) {
+func (g *ChatPage) OnMount(ctx app.Context) {
+	ctx.ObserveState("message").While(func() bool {
+		return g.MsgArray != nil
+	}).OnChange(func() {
+		g.Update()
+	})
+}
+func (g *ChatPage) onClick(ctx app.Context, e app.Event) {
 	// connect to ws://localhost:8000/ws
-	wg := sync.WaitGroup{}
-	wg.Add(1)
-	go g.MountWS(ctx, e, &wg)
-	wg.Wait()
+	go g.MountWS(ctx)
 }
 
 // The Render method is where the component appearance is defined. Here, a
 // "Hello World!" is displayed as a heading.
-func (g *greet) Render() app.UI {
+func (g *ChatPage) Render() app.UI {
 	return app.Div().Body(
 		// connect to the websocket and display the message from websocket
 		app.Button().OnClick(g.onClick).Body(
 			app.Text("Click me"),
 		),
-		app.H5().Body(
-			app.Text(cnt),
-		),
 		// If UpdateAvailable from ReadWSTesting, then update the UI
-		app.If(g.UpdateAvailable,
-			app.Button().
-				Text("Update to see the messages.")))
+		app.Range(g.MsgArray).Slice(func(i int) app.UI {
+			return app.Div().Body(
+				app.Li().Body(
+					app.Text(g.MsgArray[i]),
+				),
+			)
+		}))
+
 }
 
 func main() {
-	app.Route("/", &greet{})
-	app.Route("/greet", &greet{})
+	app.Route("/", &ChatPage{})
+	app.Route("/ChatPage", &ChatPage{})
 	app.RunWhenOnBrowser()
 
 	// add a route for the websocket without the app.Route
