@@ -81,16 +81,23 @@ func (g *ChatPage) MountWS(ctx app.Context) {
 			// woops, connection is fucked. break the loop.
 			break
 		}
-		g.MsgArray = append(g.MsgArray, tempString)
-		ctx.SetState("/newMessage", true)
-		fmt.Println("newMessage state set to true")
+		if tempString != "" {
+			g.MsgArray = append(g.MsgArray, tempString)
+			ctx.SetState("/newMessage", true)
+		} else {
+			ctx.SetState("/newMessage", false)
+		}
 		time.Sleep(time.Second * 2)
 	}
 }
 func (g *ChatPage) OnMount(ctx app.Context) {
 	ctx.ObserveState("/newMessage").OnChange(func() {
-		fmt.Println("newMessage state changed.")
-		g.Update()
+		var tempBool bool
+		ctx.GetState("/newMessage", &tempBool)
+		if tempBool {
+			fmt.Println("yeah probably")
+			ctx.Reload()
+		}
 	})
 }
 func (g *ChatPage) onClick(ctx app.Context, e app.Event) {

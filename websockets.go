@@ -38,7 +38,7 @@ func Connect(w http.ResponseWriter, r *http.Request, wg *sync.WaitGroup) {
 func WriteTesting(ctx context.Context, conn *websocket.Conn) error {
 	// create a json string that can be sent and converted to a string again
 	var tempComm TestComm
-	tempComm.Message = "ÇALIŞ ANANI SİKERİM SENİN"
+	tempComm.Message = "are we there yet?"
 	fmt.Println("Sending message to websocket:", tempComm.Message)
 	pleasework, err := json.Marshal(tempComm)
 	newWriter, err := conn.Writer(ctx, websocket.MessageText)
