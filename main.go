@@ -44,7 +44,7 @@ func (g *ChatPage) ReadWSTesting(ctx context.Context, conn *websocket.Conn, ctxA
 			return err
 		}
 
-		// write and return bool to indicate new messages
+		// write and return bool to indicate new message
 		if temp.Message != "" {
 			fmt.Println("Received message from websocket:", temp.Message)
 			err = nil
