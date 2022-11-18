@@ -1,1 +1,3 @@
-have you ever wondered, "I am coding this thing, but why"? yeah I wonder that all the time, someone give me some purpose please
+### TODOs
+1. Make the websockets bidirectional, currently only reads.
+2. Make a HTML and CSS template, would look pretty.

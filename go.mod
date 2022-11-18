@@ -1,4 +1,4 @@
-module caneer
+module amnesia
 
 go 1.19
 
