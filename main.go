@@ -129,7 +129,11 @@ func main() {
 
 	// add a route for the websocket without the app.Route
 	http.HandleFunc("/ws", Mount)
-	http.Handle("/", &app.Handler{})
+	http.Handle("/", &app.Handler{
+		Styles: []string{
+			"./web/static/chat.css",
+		},
+	})
 
 	if err := http.ListenAndServe(":3169", nil); err != nil {
 		log.Fatal(err)

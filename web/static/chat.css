@@ -1,0 +1,7 @@
+/* make a button bold, align it to right-bottom side */
+#chat .button {
+    font-weight: bold;
+    position: absolute;
+    bottom: 0;
+    right: 0;
+}
